@@ -19,12 +19,12 @@ namespace Custom.InputAccel.Ocr.GoogleOCR
 
                 GoogleCalls GC = new GoogleCalls();
                 GC.AuthImplicit("hw-recognition");
-                MessageBox.Show("Authenticated");
+                //MessageBox.Show("Authenticated");
                 GC.ProcessImage(bitmap, builder);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message);
+                MessageBox.Show(ex.ToString());
             }
             
         }

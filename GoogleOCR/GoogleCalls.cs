@@ -1,87 +1,99 @@
-﻿using Emc.Captiva.Ocr.Sdk;
+﻿using System;
+using Emc.Captiva.Ocr.Sdk;
 using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Storage.V1;
 using Google.Cloud.Vision.V1;
-using System;
-using System.ComponentModel;
 using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
 using System.Windows.Forms;
+using Google.Api.Gax;
+using Google.Apis.Storage.v1.Data;
+using Image = Google.Cloud.Vision.V1.Image;
 
 namespace Custom.InputAccel.Ocr.GoogleOCR
 {
     class GoogleCalls
     {
-        public object AuthImplicit(string projectId)
+        public void AuthImplicit(string projectId)
         {
             // If you don't specify credentials when constructing the client, the
             // client library will look for credentials in the environment.
+            GoogleCredential credential = GoogleCredential.GetApplicationDefault();
             
-            var credential = GoogleCredential.GetApplicationDefault();
-            var storage = StorageClient.Create(credential);
-            // Make an authenticated API request.
-            var buckets = storage.ListBuckets(projectId);
-            foreach (var bucket in buckets)
+            /* it doesn't seem to sue this anymore
+            using (StorageClient storage = StorageClient.Create(credential))
             {
-                Console.WriteLine(bucket.Name);
+                // Make an authenticated API request.
+                
+                PagedEnumerable<Buckets, Bucket> buckets = storage.ListBuckets(projectId);
+                foreach (Bucket bucket in buckets)
+                {
+                    MessageBox.Show(bucket.Name);
+                }
             }
-            return null;
+            */
         }
 
-
-        public class vertices
+        public struct Vertices
         {
-            public int x;
-            public int y;
+            public int X;
+            public int Y;
         }
-        public class Symbol
+
+        public class Character
         {
-            public string text;
-            public float confidence;
-            public vertices[] bound = new vertices[4];
+            public string Text;
+            public float Confidence;
+            public readonly Vertices[] Bound = new Vertices[4];
         }
 
         public void ProcessImage(Bitmap bitmap, IExtractionResultBuilder builder)
         {
+            Image image = ConvertBitmapToGoogleImage(bitmap);
+            //MessageBox.Show("Here");
+            ImageAnnotatorClient client = ImageAnnotatorClient.Create();
 
-            byte[] bytes = (byte[])TypeDescriptor.GetConverter(bitmap).ConvertTo(bitmap, typeof(byte[]));
-            var image = Google.Cloud.Vision.V1.Image.FromBytes(bytes);
-            var client = ImageAnnotatorClient.Create();
-            var response = client.DetectDocumentText(image);
-
-            foreach (var page in response.Pages)
-
+            TextAnnotation response = client.DetectDocumentText(image);
+            //MessageBox.Show(response.Text);
+            if (response == null)
             {
-                foreach (var block in page.Blocks)
-                {
-                    foreach (var paragraph in block.Paragraphs)
-                    {
-                        Console.WriteLine(string.Join("\n", paragraph.Words));
-                        foreach (var word in paragraph.Words)
-                        {
-                            foreach (var symbol in word.Symbols)
-                            {
-                                Symbol s = new Symbol();
-                                s.text = symbol.Text;
-                                s.confidence = symbol.Confidence;
-                                
-                                s.bound[0] = new vertices();
-                                s.bound[0].x = symbol.BoundingBox.Vertices[0].X;
-                                s.bound[0].y = symbol.BoundingBox.Vertices[0].Y;
-                                s.bound[1] = new vertices();
-                                s.bound[1].x = symbol.BoundingBox.Vertices[1].X;
-                                s.bound[1].y = symbol.BoundingBox.Vertices[1].Y;
-                                s.bound[2] = new vertices();
-                                s.bound[2].x = symbol.BoundingBox.Vertices[2].X;
-                                s.bound[2].y = symbol.BoundingBox.Vertices[2].Y;
-                                s.bound[3] = new vertices();
-                                s.bound[3].x = symbol.BoundingBox.Vertices[3].X;
-                                s.bound[3].y = symbol.BoundingBox.Vertices[3].Y;
-                                MessageBox.Show(s.bound[0].x.ToString() + " " + s.bound[0].y.ToString() + ", " + s.bound[1].x.ToString() + " " + s.bound[1].y.ToString() + ", " + s.bound[2].x.ToString() + " " + s.bound[2].y.ToString() + ", " + s.bound[3].x.ToString() + " " + s.bound[3].y.ToString() + ", ");
-                                MessageBox.Show("x=" + s.bound[1].x + " y=" + s.bound[3].y + "width= " + Math.Abs(s.bound[0].x - s.bound[1].x) + " height=" + Math.Abs(s.bound[0].y - s.bound[2].y));
-                                Rectangle bounds = new Rectangle(s.bound[1].x, s.bound[3].y, Math.Abs(s.bound[0].x - s.bound[1].x), Math.Abs(s.bound[0].y - s.bound[2].y));
-                                builder.AddNewCharacter(s.text, (int)s.confidence, bounds);
+                return;
+            }
 
-                                if (symbol.Property.DetectedBreak != null)
+            //MessageBox.Show(response.Text);
+            foreach (Page page in response.Pages)
+            {
+                foreach (Block block in page.Blocks)
+                {
+                    foreach (Paragraph paragraph in block.Paragraphs)
+                    {
+                        foreach (Word word in paragraph.Words)
+                        {
+                            foreach (Symbol symbol in word.Symbols)
+                            {
+                                Character s = new Character();
+
+                                s.Text = symbol.Text;
+                                s.Confidence = symbol.Confidence;
+
+                                s.Bound[0] = new Vertices();
+                                s.Bound[0].X = symbol.BoundingBox.Vertices[0].X;
+                                s.Bound[0].Y = symbol.BoundingBox.Vertices[0].Y;
+                                s.Bound[1] = new Vertices();
+                                s.Bound[1].X = symbol.BoundingBox.Vertices[1].X;
+                                s.Bound[1].Y = symbol.BoundingBox.Vertices[1].Y;
+                                s.Bound[2] = new Vertices();
+                                s.Bound[2].X = symbol.BoundingBox.Vertices[2].X;
+                                s.Bound[2].Y = symbol.BoundingBox.Vertices[2].Y;
+                                s.Bound[3] = new Vertices();
+                                s.Bound[3].X = symbol.BoundingBox.Vertices[3].X;
+                                s.Bound[3].Y = symbol.BoundingBox.Vertices[3].Y;
+
+                                Rectangle bounds = new Rectangle(s.Bound[0].X, s.Bound[0].Y, s.Bound[1].X - s.Bound[0].X, s.Bound[3].Y - s.Bound[0].Y);
+                                builder.AddNewCharacter(s.Text, (int)(Math.Round(s.Confidence * 100)), bounds);
+
+                                if (symbol.Property?.DetectedBreak != null)
                                 {
                                     switch (symbol.Property.DetectedBreak.Type)
                                     {
@@ -110,9 +122,17 @@ namespace Custom.InputAccel.Ocr.GoogleOCR
                     }
                 }
             }
-
         }
 
-    }
+        Image ConvertBitmapToGoogleImage(Bitmap bitmap)
+        {
+            using (var bitmapStream = new MemoryStream())
+            {
+                bitmap.Save(bitmapStream, ImageFormat.Bmp);
+                bitmapStream.Position = 0;
 
+                return Image.FromStream(bitmapStream);
+            }
+        }
+    }
 }
